@@ -1,0 +1,53 @@
+# Entornos virtuales
+venv/
+env/
+.venv/
+Scripts/
+Include/
+Lib/
+pyvenv.cfg
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+.python-version
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Temporary files
+temp/
+tmp/
+EOF
