@@ -5,12 +5,13 @@ services:
     environment:
       POSTGRES_USER: dev
       POSTGRES_PASSWORD: devpass
-      POSTGRES_DB: osint
+      POSTGRES_DB: osint_mvp
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+
   redis:
     image: redis:7
     ports:
@@ -18,7 +19,7 @@ services:
 
   minio:
     image: minio/minio
-    command: server /data
+    command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -37,9 +38,9 @@ services:
       - "7687:7687"
 
   api:
-    build:
-      context:
-      dockerfile: ./services/api/Dockerfile
+    build: 
+      context: .
+      dockerfile: services/api/Dockerfile
     env_file:
       - ./envs/api.env
     ports:
