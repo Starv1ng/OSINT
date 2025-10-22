@@ -37,7 +37,9 @@ services:
       - "7687:7687"
 
   api:
-    build: ./services/api/Dockerfile
+    build:
+      context:
+      dockerfile: ./services/api/Dockerfile
     env_file:
       - ./envs/api.env
     ports:
