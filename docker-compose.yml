@@ -1,11 +1,11 @@
-version: '3.8'
+
 services:
   postgres:
     image: postgres:15
     environment:
       POSTGRES_USER: dev
       POSTGRES_PASSWORD: devpass
-      POSTGRES_DB: osint_mvp
+      POSTGRES_DB: osint
     ports:
       - "5432:5432"
     volumes:
