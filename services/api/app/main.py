@@ -11,6 +11,15 @@ BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="OSINT API Gateway v2.0")
 
+@app.middleware("http")
+async def no_cache_js(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.endswith((".js", ".css", ".html")):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,6 +33,7 @@ if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 app.include_router(api_router, prefix="/api/v2")
+app.include_router(api_router, prefix="/api/v1")
 
 
 @app.get("/", response_class=HTMLResponse)

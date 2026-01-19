@@ -1,6 +1,6 @@
 // jobs.js - Lógica de historial de trabajos
 
-const API_BASE = '/api/v1';
+const API_BASE = '/api/v2';
 let currentPage = 0;
 const pageSize = 20;
 let allJobs = [];

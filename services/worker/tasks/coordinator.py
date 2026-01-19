@@ -8,7 +8,6 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from .celery_app import app
-from .orchestrator import ModuleOrchestrator
 from .dynamic_orchestrator import DynamicModuleOrchestrator
 from .modules.utils.result_processor import ResultProcessor
 from .modules.utils.input_analyzer import InputAnalyzer
@@ -48,7 +47,6 @@ def get_neo4j_client():
         _neo4j_client = Neo4jClient(NEO4J_URI, NEO4J_AUTH)
     return _neo4j_client
 
-module_orchestrator = ModuleOrchestrator()
 dynamic_orchestrator = DynamicModuleOrchestrator(
     max_iterations=int(os.environ.get("MAX_ITERATIONS", "5")),
     relevance_threshold=float(os.environ.get("RELEVANCE_THRESHOLD", "0.5")),
@@ -155,78 +153,27 @@ def process_osint_job(self, job_id: str, search_data: dict):
         }
 
 
-@app.task(bind=True, name='process_osint_job_dynamic')
-def process_osint_job_dynamic(self, job_id: str, search_data: dict):
-    """
-    Tarea que procesa jobs OSINT con búsqueda dinámica iterativa
-    """
-    return process_osint_job(self, job_id, search_data)
-
-
-@app.task(bind=True, name='process_osint_job_static')
-def process_osint_job_static(self, job_id: str, search_data: dict):
-    logger.info(f"Processing static job: {job_id}")
-    
-    try:
-        update_job_status(job_id, "processing")
-        
-        results = asyncio.run(module_orchestrator.execute_search(job_id, search_data))
-
-        save_job_results(job_id, results)
-        update_job_status(job_id, "completed")
-
-        logger.info(f"Job {job_id} completed: {len(results.get('findings', []))} findings")
-
-        return {
-            "job_id": job_id,
-            "status": "completed",
-            "results_summary": results.get("summary", {})
-        }
-        
-    except Exception as e:
-        logger.error(f"Job {job_id} failed: {e}")
-        update_job_status(job_id, "failed")
-        
-        error_results = {
-            "search_query": search_data["value"],
-            "search_type": search_data["input_type"],
-            "findings": [],
-            "error": str(e),
-            "summary": {
-                "total_findings": 0,
-                "error": True,
-                "error_message": str(e)
-            }
-        }
-        save_job_results(job_id, error_results)
-        
-        return {
-            "job_id": job_id,
-            "status": "failed",
-            "error": str(e)
-        }
-
 def update_job_status(job_id: str, status: str):
     try:
         with get_pg_client().get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE jobs SET status = %s, updated_at = NOW() WHERE job_id = %s",
-                    (status, job_id)
-                )
-                conn.commit()
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE jobs SET status = %s, updated_at = NOW() WHERE job_id = %s",
+                (status, job_id)
+            )
+            # Context manager commits automatically
     except Exception as e:
         logger.error(f"Error updating job status: {e}")
 
 def save_job_results(job_id: str, results: dict):
     try:
         with get_pg_client().get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE jobs SET result = %s, updated_at = NOW() WHERE job_id = %s",
-                    (json.dumps(results), job_id)
-                )
-                conn.commit()
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE jobs SET result = %s, updated_at = NOW() WHERE job_id = %s",
+                (json.dumps(results), job_id)
+            )
+            # Context manager commits automatically
         logger.info(f"Results saved for {job_id}")
     except Exception as e:
         logger.error(f"Error saving results: {e}")

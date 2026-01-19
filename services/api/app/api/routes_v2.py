@@ -45,23 +45,38 @@ def create_job(req: IngestRequest, user=Depends(get_current_user)):
     job_id = f"job-{uuid.uuid4().hex[:8]}"
     
     try:
-        enqueue_data = req.dict()
-        enqueue_data['max_iterations'] = req.max_iterations or settings.MAX_ITERATIONS
-        enqueue_data['relevance_threshold'] = req.relevance_threshold or settings.RELEVANCE_THRESHOLD
-        enqueue_data['execution_mode'] = req.execution_mode or settings.EXECUTION_MODE
+        # Create job record
+        pg_client.create_job(job_id, req.requester_id, req.input_type, req.value)
         
-        enqueue_result = enqueue_job(job_id, enqueue_data)
-        
-        return {
-            "job_id": job_id,
-            "status": "accepted",
-            "task_id": enqueue_result.get("task_id"),
-            "config": {
-                "max_iterations": enqueue_data['max_iterations'],
-                "relevance_threshold": enqueue_data['relevance_threshold'],
-                "execution_mode": enqueue_data['execution_mode']
+        try:
+            # Try to enqueue the job
+            enqueue_data = req.dict()
+            enqueue_data['max_iterations'] = req.max_iterations or settings.MAX_ITERATIONS
+            enqueue_data['relevance_threshold'] = req.relevance_threshold or settings.RELEVANCE_THRESHOLD
+            enqueue_data['execution_mode'] = req.execution_mode or settings.EXECUTION_MODE
+            
+            enqueue_result = enqueue_job(job_id, enqueue_data)
+            
+            return {
+                "job_id": job_id,
+                "status": "accepted",
+                "task_id": enqueue_result.get("task_id"),
+                "config": {
+                    "max_iterations": enqueue_data['max_iterations'],
+                    "relevance_threshold": enqueue_data['relevance_threshold'],
+                    "execution_mode": enqueue_data['execution_mode']
+                }
             }
-        }
+        except Exception as enqueue_error:
+            # Rollback job creation if enqueue fails
+            logger.warning(f"Enqueue failed for job {job_id}, rolling back job creation: {enqueue_error}")
+            with pg_client.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM jobs WHERE job_id = %s", (job_id,))
+                    conn.commit()
+            raise HTTPException(status_code=500, detail=f"Failed to enqueue job: {str(enqueue_error)}")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating job: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -175,6 +190,7 @@ def get_job_findings(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/jobs/{job_id}/findings/{finding_id}")
 def get_finding(job_id: str, finding_id: str, user=Depends(get_current_user)):
@@ -392,7 +408,20 @@ def health_check():
         "status": "healthy",
         "service": "OSINT API v2.0",
         "timestamp": datetime.now().isoformat(),
-        "components": {}
+        "components": {},
+        "endpoints": {
+            "jobs": 6,
+            "findings": 10,
+            "indicators": 3,
+            "aggregations": 4,
+            "graph": 4,
+            "export": 2,
+            "batch": 2,
+            "admin": 1,
+            "config": 2,
+            "search": 1,
+            "other": 1
+        }
     }
     
     health_status["components"]["postgres"] = "up" if pg_client.health_check() else "down"
@@ -407,10 +436,22 @@ def health_check():
 @router.get("/stats")
 def get_system_stats(user=Depends(get_current_user)):
     try:
+        # Get actual counts from databases
+        with pg_client.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM jobs")
+                total_jobs = cur.fetchone()[0]
+                
+                cur.execute("SELECT COUNT(*) FROM findings")
+                total_findings = cur.fetchone()[0]
+                
+                cur.execute("SELECT COUNT(*) FROM indicators")
+                total_indicators = cur.fetchone()[0]
+        
         return {
-            "total_findings": 0,
-            "total_indicators": 0,
-            "total_jobs": 0,
+            "total_findings": total_findings,
+            "total_indicators": total_indicators,
+            "total_jobs": total_jobs,
             "neo4j_stats": neo4j_client.get_statistics()
         }
     except Exception as e:
@@ -494,13 +535,35 @@ def create_batch_jobs(requests: List[IngestRequest], user=Depends(get_current_us
 @router.get("/batch/{batch_id}/results")
 def get_batch_results(batch_id: str, user=Depends(get_current_user)):
     try:
+        with pg_client.get_connection() as conn:
+            with conn.cursor() as cur:
+                # Get batch record
+                cur.execute("SELECT * FROM batches WHERE batch_id = %s", (batch_id,))
+                batch = cur.fetchone()
+                if not batch:
+                    raise HTTPException(status_code=404, detail="Batch not found")
+                
+                # Get all jobs in batch
+                cur.execute(
+                    "SELECT job_id, status FROM jobs WHERE batch_id = %s ORDER BY created_at DESC",
+                    (batch_id,)
+                )
+                jobs = [{"job_id": row[0], "status": row[1]} for row in cur.fetchall()]
+                
+                # Count by status
+                completed = sum(1 for j in jobs if j["status"] == "completed")
+                failed = sum(1 for j in jobs if j["status"] == "failed")
+                processing = sum(1 for j in jobs if j["status"] in ["queued", "running"])
+        
         return {
             "batch_id": batch_id,
-            "jobs": [],
-            "completed": 0,
-            "failed": 0,
-            "processing": 0
+            "jobs": jobs,
+            "completed": completed,
+            "failed": failed,
+            "processing": processing
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -681,13 +744,31 @@ def pause_job(job_id: str, user=Depends(get_current_user)):
     try:
         with pg_client.get_connection() as conn:
             with conn.cursor() as cur:
+                # Get task_id from job record
+                cur.execute("SELECT task_id FROM jobs WHERE job_id = %s", (job_id,))
+                result = cur.fetchone()
+                if not result or not result[0]:
+                    raise HTTPException(status_code=404, detail="Job not found or not queued")
+                
+                task_id = result[0]
+                
+                # Update job status to paused
                 cur.execute(
                     "UPDATE jobs SET status = 'paused', updated_at = NOW() WHERE job_id = %s",
                     (job_id,)
                 )
                 conn.commit()
         
-        return {"job_id": job_id, "status": "paused"}
+        # Revoke the Celery task to stop execution
+        try:
+            from celery.app.control import Revoke
+            app.control.revoke(task_id, terminate=True, signal='SIGKILL')
+        except Exception as task_error:
+            logger.warning(f"Could not revoke task {task_id}: {task_error}")
+        
+        return {"job_id": job_id, "status": "paused", "task_id": task_id}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -437,6 +437,21 @@ class PostgreSQLClient:
         except Exception as e:
             self.logger.error(f"Health check failed: {e}")
             return False
+
+    def create_job(self, job_id: str, requester_id: str, input_type: str, input_value: str) -> bool:
+        """Create a new job record in PostgreSQL"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO jobs (job_id, requester_id, input_type, input_value, status, progress)
+                    VALUES (%s, %s, %s, %s, 'accepted', 0)
+                    ON CONFLICT (job_id) DO NOTHING
+                """, (job_id, requester_id, input_type, input_value))
+                return True
+        except Exception as e:
+            self.logger.error(f"Error creating job: {e}")
+            return False
     
     def close(self):
         """Close all connections in pool"""

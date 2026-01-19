@@ -111,6 +111,27 @@ class DynamicModuleOrchestrator:
         # Ejecutar iteraciones mientras haya indicadores nuevos
         while iteration < self.max_iterations and new_indicators_found:
             iteration += 1
+            
+            # Check for pause status before each iteration
+            try:
+                from .es_client import get_es_client
+                pg = get_es_client().pg_client
+                with pg.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT status FROM jobs WHERE job_id = %s", (job_id,))
+                        result = cur.fetchone()
+                        if result and result[0] == 'paused':
+                            logger.info(f"Job {job_id} has been paused, stopping execution")
+                            return {
+                                "search_query": initial_query,
+                                "search_type": initial_type,
+                                "findings": all_findings,
+                                "status": "paused",
+                                "iterations": iteration - 1
+                            }
+            except Exception as pause_check_error:
+                logger.warning(f"Could not check pause status: {pause_check_error}")
+            
             logger.info(f"\nIteración {iteration}/{self.max_iterations}")
             
             iteration_findings = []
