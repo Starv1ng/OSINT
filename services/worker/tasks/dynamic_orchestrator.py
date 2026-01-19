@@ -3,6 +3,7 @@
 import asyncio
 import re
 import logging
+import os
 from typing import Dict, List, Any, Set, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -31,12 +32,20 @@ logger = logging.getLogger(__name__)
 class DynamicModuleOrchestrator:
     """Orquestador dinámico que ejecuta módulos iterativamente basado en hallazgos"""
     
-    def __init__(self, max_workers: int = 3, max_iterations: int = 5, relevance_threshold: float = 0.5, execution_mode: str = None):
+    def __init__(
+        self,
+        max_workers: int = 3,
+        max_iterations: int = 5,
+        relevance_threshold: float = 0.5,
+        execution_mode: str = None,
+        pg_client=None,
+    ):
         self.max_workers = max_workers
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.max_iterations = max_iterations
         self.relevance_threshold = relevance_threshold
         self.execution_mode = execution_mode or 'normal'
+        self.pg_client = pg_client
         
         # Aplicar preajuste si se especifica modo
         if execution_mode and execution_mode != 'custom':
@@ -114,9 +123,12 @@ class DynamicModuleOrchestrator:
             
             # Check for pause status before each iteration
             try:
-                from .es_client import get_es_client
-                pg = get_es_client().pg_client
-                with pg.get_connection() as conn:
+                if self.pg_client is None:
+                    from shared.postgres_client import PostgreSQLClient
+                    db_url = os.environ.get("DATABASE_URL", "postgresql://dev:devpass@postgres:5432/osint")
+                    self.pg_client = PostgreSQLClient(db_url)
+
+                with self.pg_client.get_connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute("SELECT status FROM jobs WHERE job_id = %s", (job_id,))
                         result = cur.fetchone()

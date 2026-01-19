@@ -6,10 +6,23 @@ from fastapi.responses import HTMLResponse
 from pathlib import Path
 from api.routes_v2 import router as api_router
 from templates import templates
+import logging
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="OSINT API Gateway v2.0")
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database connections and indices"""
+    try:
+        from api.routes_v2 import es_client
+        es_client.create_indices()
+        logger.info("✅ Elasticsearch indices created/verified")
+    except Exception as e:
+        logger.error(f"Error during startup: {e}")
 
 @app.middleware("http")
 async def no_cache_js(request: Request, call_next):

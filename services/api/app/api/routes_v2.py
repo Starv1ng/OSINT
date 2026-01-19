@@ -56,11 +56,15 @@ def create_job(req: IngestRequest, user=Depends(get_current_user)):
             enqueue_data['execution_mode'] = req.execution_mode or settings.EXECUTION_MODE
             
             enqueue_result = enqueue_job(job_id, enqueue_data)
+            task_id = enqueue_result.get("task_id") if isinstance(enqueue_result, dict) else str(enqueue_result)
+            
+            # Store task_id in database
+            pg_client.update_job_task_id(job_id, task_id)
             
             return {
                 "job_id": job_id,
                 "status": "accepted",
-                "task_id": enqueue_result.get("task_id"),
+                "task_id": task_id,
                 "config": {
                     "max_iterations": enqueue_data['max_iterations'],
                     "relevance_threshold": enqueue_data['relevance_threshold'],
@@ -115,16 +119,34 @@ def list_jobs(
     status: Optional[str] = None
 ):
     try:
-        total = pg_client.get_findings_count("*")
+        jobs = pg_client.list_jobs(limit=limit, offset=offset, status=status)
+        total = pg_client.count_jobs(status=status)
+        
+        # Format jobs with current status from DB
+        formatted_jobs = []
+        for job in jobs:
+            formatted_jobs.append({
+                "job_id": job.get('job_id'),
+                "status": job.get('status'),
+                "requester_id": job.get('requester_id'),
+                "input_type": job.get('input_type'),
+                "input_value": job.get('input_value'),
+                "progress": job.get('progress', 0),
+                "created_at": job.get('created_at'),
+                "updated_at": job.get('updated_at')
+            })
+        
         return {
-            "jobs": [],
+            "jobs": formatted_jobs,
             "pagination": {
                 "total": total,
                 "limit": limit,
-                "offset": offset
+                "offset": offset,
+                "has_more": (offset + len(jobs)) < total
             }
         }
     except Exception as e:
+        logger.error(f"List jobs error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/jobs/{job_id}")
@@ -362,6 +384,11 @@ def search_findings(
         if min_confidence:
             filters["min_confidence"] = min_confidence
         
+        try:
+            es_client.refresh_index()
+        except Exception as refresh_error:
+            logger.warning(f"Could not refresh index: {refresh_error}")
+        
         result = es_client.search_findings(
             query=query,
             filters=filters,
@@ -371,11 +398,12 @@ def search_findings(
         
         return {
             "query": query,
-            "findings": result['hits'],
-            "total": result['total'],
-            "took_ms": result.get('took_ms')
+            "findings": result.get('hits', []),
+            "total": result.get('total', 0),
+            "took_ms": result.get('took_ms', 0)
         }
     except Exception as e:
+        logger.error(f"Search error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/config")
@@ -437,24 +465,37 @@ def health_check():
 def get_system_stats(user=Depends(get_current_user)):
     try:
         # Get actual counts from databases
-        with pg_client.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM jobs")
-                total_jobs = cur.fetchone()[0]
-                
-                cur.execute("SELECT COUNT(*) FROM findings")
-                total_findings = cur.fetchone()[0]
-                
-                cur.execute("SELECT COUNT(*) FROM indicators")
-                total_indicators = cur.fetchone()[0]
+        try:
+            with pg_client.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT COUNT(*) FROM jobs WHERE status IN ('completed', 'processing')")
+                    total_jobs = cur.fetchone()[0] if cur else 0
+                    
+                    cur.execute("SELECT COUNT(*) FROM findings WHERE soft_deleted = false")
+                    total_findings = cur.fetchone()[0] if cur else 0
+                    
+                    cur.execute("SELECT COUNT(*) FROM indicators")
+                    total_indicators = cur.fetchone()[0] if cur else 0
+        except Exception as db_error:
+            logger.error(f"Database error getting stats: {db_error}")
+            total_jobs = 0
+            total_findings = 0
+            total_indicators = 0
+        
+        try:
+            neo4j_stats = neo4j_client.get_statistics()
+        except Exception as neo4j_error:
+            logger.error(f"Neo4j error: {neo4j_error}")
+            neo4j_stats = {}
         
         return {
             "total_findings": total_findings,
             "total_indicators": total_indicators,
             "total_jobs": total_jobs,
-            "neo4j_stats": neo4j_client.get_statistics()
+            "neo4j_stats": neo4j_stats
         }
     except Exception as e:
+        logger.error(f"Stats error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/available-modules")
@@ -513,22 +554,44 @@ def export_job_csv(job_id: str, user=Depends(get_current_user)):
 @router.post("/batch/jobs")
 def create_batch_jobs(requests: List[IngestRequest], user=Depends(get_current_user)):
     try:
+        batch_id = f"batch-{uuid.uuid4().hex[:8]}"
+        if not pg_client.create_batch(batch_id, len(requests)):
+            raise HTTPException(status_code=500, detail="Failed to create batch record")
+
         batch_results = []
         for req in requests:
             job_id = f"job-{uuid.uuid4().hex[:8]}"
             enqueue_data = req.dict()
-            enqueue_job(job_id, enqueue_data)
+            enqueue_data['max_iterations'] = req.max_iterations or settings.MAX_ITERATIONS
+            enqueue_data['relevance_threshold'] = req.relevance_threshold or settings.RELEVANCE_THRESHOLD
+            enqueue_data['execution_mode'] = req.execution_mode or settings.EXECUTION_MODE
+
+            pg_client.create_job(job_id, req.requester_id, req.input_type, req.value, batch_id=batch_id)
+
+            try:
+                enqueue_result = enqueue_job(job_id, enqueue_data)
+            except Exception as enqueue_error:
+                # Rollback job creation if enqueue fails
+                with pg_client.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("DELETE FROM jobs WHERE job_id = %s", (job_id,))
+                        conn.commit()
+                raise HTTPException(status_code=500, detail=f"Failed to enqueue job {job_id}: {enqueue_error}")
+
             batch_results.append({
                 "job_id": job_id,
                 "input": req.value,
-                "status": "accepted"
+                "status": "accepted",
+                "task_id": enqueue_result.get("task_id") if isinstance(enqueue_result, dict) else None
             })
         
         return {
-            "batch_id": f"batch-{uuid.uuid4().hex[:8]}",
+            "batch_id": batch_id,
             "jobs_count": len(batch_results),
             "jobs": batch_results
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -695,11 +758,11 @@ def get_job_module_runs(
     limit: int = Query(default=100, le=settings.API_MAX_LIMIT)
 ):
     try:
-        result = es_client.get_module_runs(job_id, limit)
+        module_runs = pg_client.get_module_runs(job_id)
         return {
             "job_id": job_id,
-            "module_runs": result.get('hits', []),
-            "total": result.get('total', 0)
+            "module_runs": module_runs[:limit],
+            "total": len(module_runs)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

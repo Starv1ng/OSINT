@@ -50,7 +50,8 @@ def get_neo4j_client():
 dynamic_orchestrator = DynamicModuleOrchestrator(
     max_iterations=int(os.environ.get("MAX_ITERATIONS", "5")),
     relevance_threshold=float(os.environ.get("RELEVANCE_THRESHOLD", "0.5")),
-    execution_mode=os.environ.get("EXECUTION_MODE", "normal")
+    execution_mode=os.environ.get("EXECUTION_MODE", "normal"),
+    pg_client=get_pg_client()
 )
 
 @app.task(bind=True, name='process_osint_job')
@@ -88,24 +89,31 @@ def process_osint_job(self, job_id: str, search_data: dict):
                 
                 finding_hash = get_pg_client().compute_finding_hash(finding_data)
                 if not get_pg_client().check_dedup_exists(job_id, finding_hash):
-                    finding_id = get_pg_client().create_finding(finding_data)
-                    get_pg_client().record_dedup(job_id, finding_hash, finding_id)
-                    
-                    finding_data['finding_id'] = finding_id
-                    findings_to_save.append(finding_data)
-                    
-                    if finding.get('extracted_indicators'):
-                        for indicator in finding['extracted_indicators']:
-                            get_pg_client().create_indicator({
-                                'type': indicator.get('type'),
-                                'value': indicator.get('value'),
-                                'normalized_value': indicator.get('normalized_value', indicator.get('value')),
-                                'source_finding_id': finding_id,
-                                'confidence': indicator.get('confidence', 0.5)
-                            })
+                    try:
+                        finding_id = get_pg_client().create_finding(finding_data)
+                        get_pg_client().record_dedup(job_id, finding_hash, finding_id)
+                        
+                        finding_data['finding_id'] = finding_id
+                        findings_to_save.append(finding_data)
+                        
+                        if finding.get('extracted_indicators'):
+                            for indicator in finding['extracted_indicators']:
+                                get_pg_client().create_indicator({
+                                    'type': indicator.get('type'),
+                                    'value': indicator.get('value'),
+                                    'normalized_value': indicator.get('normalized_value', indicator.get('value')),
+                                    'source_finding_id': finding_id,
+                                    'confidence': indicator.get('confidence', 0.5)
+                                })
+                    except Exception as finding_error:
+                        logger.error(f"Error processing finding {finding.get('value')}: {finding_error}")
             
             if findings_to_save:
-                get_es_client().bulk_index_findings(findings_to_save)
+                try:
+                    success, errors = get_es_client().bulk_index_findings(findings_to_save)
+                    logger.info(f"Indexed {success} findings, {errors} errors")
+                except Exception as index_error:
+                    logger.error(f"Error bulk indexing findings: {index_error}")
             
             processed = ResultProcessor.process_findings(
                 results['findings'],
@@ -153,15 +161,21 @@ def process_osint_job(self, job_id: str, search_data: dict):
         }
 
 
-def update_job_status(job_id: str, status: str):
+def update_job_status(job_id: str, status: str, progress: int = None):
     try:
         with get_pg_client().get_connection() as conn:
             cur = conn.cursor()
-            cur.execute(
-                "UPDATE jobs SET status = %s, updated_at = NOW() WHERE job_id = %s",
-                (status, job_id)
-            )
-            # Context manager commits automatically
+            if progress is not None:
+                cur.execute(
+                    "UPDATE jobs SET status = %s, progress = %s, updated_at = NOW() WHERE job_id = %s",
+                    (status, progress, job_id)
+                )
+            else:
+                cur.execute(
+                    "UPDATE jobs SET status = %s, updated_at = NOW() WHERE job_id = %s",
+                    (status, job_id)
+                )
+            logger.info(f"Job {job_id} status updated to {status}" + (f" (progress: {progress}%)" if progress else ""))
     except Exception as e:
         logger.error(f"Error updating job status: {e}")
 

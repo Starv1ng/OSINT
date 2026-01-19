@@ -438,21 +438,119 @@ class PostgreSQLClient:
             self.logger.error(f"Health check failed: {e}")
             return False
 
-    def create_job(self, job_id: str, requester_id: str, input_type: str, input_value: str) -> bool:
-        """Create a new job record in PostgreSQL"""
+    def create_batch(self, batch_id: str, total_jobs: int) -> bool:
+        """Create a batch record so it can be tracked later."""
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO jobs (job_id, requester_id, input_type, input_value, status, progress)
-                    VALUES (%s, %s, %s, %s, 'accepted', 0)
+                cursor.execute(
+                    """
+                    INSERT INTO batches (batch_id, total_jobs, created_at)
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT (batch_id) DO NOTHING
+                    """,
+                    (batch_id, total_jobs),
+                )
+                return True
+        except Exception as e:
+            self.logger.error(f"Error creating batch {batch_id}: {e}")
+            return False
+
+    def count_jobs(self, status: Optional[str] = None) -> int:
+        """Count jobs, optionally filtered by status."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            query = "SELECT COUNT(*) FROM jobs"
+            params = []
+            if status:
+                query += " WHERE status = %s"
+                params.append(status)
+            cursor.execute(query, params)
+            return cursor.fetchone()[0]
+
+    def list_jobs(self, limit: int = 20, offset: int = 0, status: Optional[str] = None) -> List[Dict]:
+        """Return a paginated list of jobs with basic metadata."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            query = (
+                "SELECT job_id, status, requester_id, input_type, input_value, progress, created_at, updated_at "
+                "FROM jobs"
+            )
+            params = []
+            if status:
+                query += " WHERE status = %s"
+                params.append(status)
+            query += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+            cursor.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def create_job(
+        self,
+        job_id: str,
+        requester_id: str,
+        input_type: str,
+        input_value: str,
+        batch_id: Optional[str] = None,
+    ) -> bool:
+        """Create a new job record in PostgreSQL."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO jobs (job_id, batch_id, requester_id, input_type, input_value, status, progress)
+                    VALUES (%s, %s, %s, %s, %s, 'accepted', 0)
                     ON CONFLICT (job_id) DO NOTHING
-                """, (job_id, requester_id, input_type, input_value))
+                    """,
+                    (job_id, batch_id, requester_id, input_type, input_value),
+                )
                 return True
         except Exception as e:
             self.logger.error(f"Error creating job: {e}")
+            return False
+
+    def count_indicators(self) -> int:
+        """Count total indicators in database"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM indicators")
+                result = cursor.fetchone()
+                return result[0] if result else 0
+        except Exception as e:
+            self.logger.error(f"Error counting indicators: {e}")
+            return 0
+
+    def update_job_progress(self, job_id: str, progress: int) -> bool:
+        """Update job progress percentage"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE jobs SET progress = %s, updated_at = NOW() WHERE job_id = %s",
+                    (progress, job_id)
+                )
+                return cursor.rowcount > 0
+        except Exception as e:
+            self.logger.error(f"Error updating job progress: {e}")
+            return False
+
+    def update_job_task_id(self, job_id: str, task_id: str) -> bool:
+        """Update job with Celery task_id"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE jobs SET task_id = %s WHERE job_id = %s",
+                    (task_id, job_id)
+                )
+                return cursor.rowcount > 0
+        except Exception as e:
+            self.logger.error(f"Error updating job task_id: {e}")
             return False
     
     def close(self):
         """Close all connections in pool"""
         self.pool.closeall()
+
