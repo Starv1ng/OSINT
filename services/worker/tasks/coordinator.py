@@ -1,29 +1,53 @@
-# services/worker/tasks/coordinator.py
 import time
 import json
 import asyncio
-from sqlalchemy import create_engine, text
 import os
 import logging
+import sys
 
-# Importar la aplicación Celery
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 from .celery_app import app
-# Importar el orquestador de módulos reales
 from .orchestrator import ModuleOrchestrator
 from .dynamic_orchestrator import DynamicModuleOrchestrator
-# Importar el procesador de resultados y analizador de input
 from .modules.utils.result_processor import ResultProcessor
 from .modules.utils.input_analyzer import InputAnalyzer
-# El indexado en Elasticsearch es gestionado por el orquestador para persistencia incremental
+from shared.postgres_client import PostgreSQLClient
+from shared.elasticsearch_client import ElasticsearchClient
+from shared.neo4j_client import Neo4jClient
 
-# Configurar logging
 logger = logging.getLogger(__name__)
 
-# Configurar conexión a la base de datos
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://dev:devpass@postgres:5432/osint")
-engine = create_engine(DATABASE_URL)
+ES_HOST = os.environ.get("ELASTICSEARCH_HOST", "http://elasticsearch:9200")
+NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://neo4j:7687")
+NEO4J_AUTH = (
+    os.environ.get("NEO4J_USER", "neo4j"),
+    os.environ.get("NEO4J_PASSWORD", "password123")
+)
 
-# Instancias globales de orquestadores
+_pg_client = None
+_es_client = None
+_neo4j_client = None
+
+def get_pg_client():
+    global _pg_client
+    if _pg_client is None:
+        _pg_client = PostgreSQLClient(DATABASE_URL)
+    return _pg_client
+
+def get_es_client():
+    global _es_client
+    if _es_client is None:
+        _es_client = ElasticsearchClient([ES_HOST])
+    return _es_client
+
+def get_neo4j_client():
+    global _neo4j_client
+    if _neo4j_client is None:
+        _neo4j_client = Neo4jClient(NEO4J_URI, NEO4J_AUTH)
+    return _neo4j_client
+
 module_orchestrator = ModuleOrchestrator()
 dynamic_orchestrator = DynamicModuleOrchestrator(
     max_iterations=int(os.environ.get("MAX_ITERATIONS", "5")),
@@ -33,55 +57,71 @@ dynamic_orchestrator = DynamicModuleOrchestrator(
 
 @app.task(bind=True, name='process_osint_job')
 def process_osint_job(self, job_id: str, search_data: dict):
-    """
-    Tarea REAL que procesa jobs OSINT usando módulos reales
-    Ahora adapta dinámicamente los módulos según el tipo de input
-    """
     query = search_data['value']
-    logger.info(f"Procesando trabajo: {job_id}")
-    logger.info(f"Entrada: {query}")
+    logger.info(f"Processing job: {job_id} - Query: {query}")
     
     try:
-        # 1. ANALIZAR INPUT para determinar qué módulos usar
         input_analysis = InputAnalyzer.analyze(query)
-        logger.info(f"Tipo detectado: {input_analysis['input_type']}")
-        logger.info(f"Confianza: {input_analysis['confidence']:.2f}")
-        logger.info(f"Módulos principales: {', '.join(input_analysis['primary_modules'])}")
+        logger.info(f"Type: {input_analysis['input_type']} (conf: {input_analysis['confidence']:.2f})")
         
-        # 2. ACTUALIZAR ESTADO
         update_job_status(job_id, "processing")
         
-        # 3. EJECUTAR BÚSQUEDA DINÁMICA CON MÓDULOS ADAPTADOS
-        logger.info("Ejecutando búsqueda dinámica con módulos adaptados...")
-        
-        # Pasar información de análisis al orquestador
         search_data_enhanced = dict(search_data)
         search_data_enhanced['input_analysis'] = input_analysis
         search_data_enhanced['preferred_modules'] = input_analysis['primary_modules']
         
         results = asyncio.run(dynamic_orchestrator.execute_dynamic_search(job_id, search_data_enhanced))
         
-        # 4. Procesar resultados (filtrado, evaluación, extracción)
         if results.get('findings'):
+            findings_to_save = []
+            for finding in results['findings']:
+                finding_data = {
+                    'job_id': job_id,
+                    'module_name': finding.get('module', 'unknown'),
+                    'type': finding.get('type', 'general'),
+                    'value': finding.get('value', ''),
+                    'normalized_value': finding.get('normalized_value', finding.get('value', '')),
+                    'confidence': finding.get('confidence', 0.5),
+                    'relevance_score': finding.get('relevance_score', 0.5),
+                    'source_url': finding.get('source_url'),
+                    'raw_text': finding.get('raw_text'),
+                    'metadata': finding.get('metadata', {})
+                }
+                
+                finding_hash = get_pg_client().compute_finding_hash(finding_data)
+                if not get_pg_client().check_dedup_exists(job_id, finding_hash):
+                    finding_id = get_pg_client().create_finding(finding_data)
+                    get_pg_client().record_dedup(job_id, finding_hash, finding_id)
+                    
+                    finding_data['finding_id'] = finding_id
+                    findings_to_save.append(finding_data)
+                    
+                    if finding.get('extracted_indicators'):
+                        for indicator in finding['extracted_indicators']:
+                            get_pg_client().create_indicator({
+                                'type': indicator.get('type'),
+                                'value': indicator.get('value'),
+                                'normalized_value': indicator.get('normalized_value', indicator.get('value')),
+                                'source_finding_id': finding_id,
+                                'confidence': indicator.get('confidence', 0.5)
+                            })
+            
+            if findings_to_save:
+                get_es_client().bulk_index_findings(findings_to_save)
+            
             processed = ResultProcessor.process_findings(
                 results['findings'],
                 query=query,
                 context=input_analysis['input_type']
             )
             results['processed'] = processed
-            logger.info(f"Procesados: {processed['statistics']['final_count']} hallazgos depurados")
-            logger.info(
-                f"Indicadores extraídos: {len(processed['extracted_indicators']['emails'])} correos, "
-                f"{len(processed['extracted_indicators']['usernames'])} nombres de usuario"
-            )
+            
+            logger.info(f"Saved {len(findings_to_save)} findings, {len(processed['extracted_indicators'].get('emails', []))} emails")
         
-        # 5. GUARDAR RESULTADOS
         save_job_results(job_id, results)
         update_job_status(job_id, "completed")
         
-        logger.info(f"Trabajo {job_id} completado")
-        logger.info(f"Hallazgos: {len(results.get('findings', []))}")
-        logger.info(f"Iteraciones: {results.get('iterations', 1)}")
+        logger.info(f"Job {job_id} completed: {len(results.get('findings', []))} findings")
         
         return {
             "job_id": job_id,
@@ -92,7 +132,7 @@ def process_osint_job(self, job_id: str, search_data: dict):
         }
         
     except Exception as e:
-        logger.error(f"[ERROR] Job {job_id}: {e}")
+        logger.error(f"Job {job_id} failed: {e}")
         update_job_status(job_id, "failed")
         
         error_results = {
@@ -125,23 +165,17 @@ def process_osint_job_dynamic(self, job_id: str, search_data: dict):
 
 @app.task(bind=True, name='process_osint_job_static')
 def process_osint_job_static(self, job_id: str, search_data: dict):
-    """
-    Tarea que procesa jobs OSINT con búsqueda estática (módulos predefinidos)
-    """
-    logger.info(f"Procesando trabajo estático: {job_id}")
-    logger.info(f"Búsqueda: {search_data['value']} (tipo: {search_data['input_type']})")
+    logger.info(f"Processing static job: {job_id}")
     
     try:
         update_job_status(job_id, "processing")
         
-        logger.info("Ejecutando búsqueda OSINT estática...")
         results = asyncio.run(module_orchestrator.execute_search(job_id, search_data))
 
         save_job_results(job_id, results)
         update_job_status(job_id, "completed")
 
-        logger.info(f"Trabajo {job_id} completado")
-        logger.info(f"Resultados: {len(results.get('findings', []))} descubrimientos")
+        logger.info(f"Job {job_id} completed: {len(results.get('findings', []))} findings")
 
         return {
             "job_id": job_id,
@@ -150,7 +184,7 @@ def process_osint_job_static(self, job_id: str, search_data: dict):
         }
         
     except Exception as e:
-        logger.error(f"Error procesando trabajo {job_id}: {e}")
+        logger.error(f"Job {job_id} failed: {e}")
         update_job_status(job_id, "failed")
         
         error_results = {
@@ -173,23 +207,26 @@ def process_osint_job_static(self, job_id: str, search_data: dict):
         }
 
 def update_job_status(job_id: str, status: str):
-    """Actualizar estado del job en PostgreSQL"""
     try:
-        with engine.begin() as conn:
-            query = text("UPDATE jobs SET status = :status WHERE job_id = :job_id")
-            conn.execute(query, {"status": status, "job_id": job_id})
-        logger.info(f"   BD: Job {job_id} -> {status}")
+        with get_pg_client().get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE jobs SET status = %s, updated_at = NOW() WHERE job_id = %s",
+                    (status, job_id)
+                )
+                conn.commit()
     except Exception as e:
-        logger.error(f"Error actualizando estado: {e}")
+        logger.error(f"Error updating job status: {e}")
 
 def save_job_results(job_id: str, results: dict):
-    """Guardar resultados en PostgreSQL"""
     try:
-        # Guardar solo un resumen en Postgres. Los hallazgos completos están en Elasticsearch.
-        summary = results.get('summary') if isinstance(results, dict) else None
-        with engine.begin() as conn:
-            query = text("UPDATE jobs SET result = :result WHERE job_id = :job_id")
-            conn.execute(query, {"result": json.dumps({'summary': summary}), "job_id": job_id})
-        logger.info(f"   BD: Resumen guardado para {job_id} (full results in ES)")
+        with get_pg_client().get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE jobs SET result = %s, updated_at = NOW() WHERE job_id = %s",
+                    (json.dumps(results), job_id)
+                )
+                conn.commit()
+        logger.info(f"Results saved for {job_id}")
     except Exception as e:
-        logger.error(f"Error guardando resultados: {e}")
+        logger.error(f"Error saving results: {e}")

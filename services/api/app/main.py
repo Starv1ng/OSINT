@@ -4,12 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pathlib import Path
-from api.routes import router as api_router
+from api.routes_v2 import router as api_router
 from templates import templates
 
 BASE_DIR = Path(__file__).resolve().parent
 
-app = FastAPI(title="OSINT API Gateway")
+app = FastAPI(title="OSINT API Gateway v2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,12 +19,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Montar archivos estáticos
 static_dir = BASE_DIR / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-app.include_router(api_router, prefix="/api/v1")
+app.include_router(api_router, prefix="/api/v2")
 
 
 @app.get("/", response_class=HTMLResponse)
