@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Inicio - OSINT Platform{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/index.css">
+{% endblock %}
+
+{% block content %}
+<main>
+    <div class="card">
+        <h2>Bienvenido</h2>
+        
+        <p class="intro-text">
+            Sistema profesional de inteligencia de fuentes abiertas con detección automática de tipo de input 
+            y selección inteligente de módulos. Proporciona resultados filtrados, puntuados y ordenados por relevancia.
+        </p>
+        
+    </div>
+</main>
+
+<div class="card">
+    <h2>Características Principales</h2>
+    
+    <div class="features-grid">
+        <div class="feature-item">
+            <h3>Detección Inteligente</h3>
+            <p>
+                Detección automática del tipo de input (persona, correo, dominio, nombre de usuario, etc.) 
+                y selección de módulos apropiados para búsqueda óptima.
+            </p>
+        </div>
+        
+        <div class="feature-item">
+            <h3>Filtrado Automático</h3>
+            <p>
+                Eliminación automática de ruido (atributos HTML, spam, parámetros inútiles) 
+                para obtener resultados limpios y relevantes.
+            </p>
+        </div>
+        
+        <div class="feature-item">
+            <h3>Evaluación Automática</h3>
+            <p>
+                Los hallazgos se puntúan automáticamente (0.0-1.0) según relevancia 
+                y se ordenan por importancia.
+            </p>
+        </div>
+        
+        <div class="feature-item">
+            <h3>Módulos Adaptables</h3>
+            <p>
+                Selección dinámica de módulos según el tipo de input. 
+                Fallback automático si alguno no está disponible.
+            </p>
+        </div>
+        
+        <div class="feature-item">
+            <h3>Búsqueda Iterativa</h3>
+            <p>
+                Extracción automática de indicadores y búsquedas adicionales 
+                en iteraciones posteriores.
+            </p>
+        </div>
+        
+        <div class="feature-item">
+            <h3>Estadísticas en Tiempo Real</h3>
+            <p>
+                Monitoreo en tiempo real del progreso con estadísticas 
+                detalladas de resultados.
+            </p>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

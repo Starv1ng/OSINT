@@ -29,10 +29,28 @@ services:
     volumes:
       - miniodata:/data
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.10.2
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
   neo4j:
     image: neo4j:5
     environment:
-      NEO4J_AUTH: neo4j/test
+      NEO4J_AUTH: neo4j/password123
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -51,6 +69,7 @@ services:
       - postgres
       - redis
       - minio
+      - elasticsearch
 
   worker:
     build:
@@ -64,7 +83,9 @@ services:
       - postgres
       - redis
       - minio
+      - elasticsearch
 
 volumes:
   pgdata:
   miniodata:
+  esdata:

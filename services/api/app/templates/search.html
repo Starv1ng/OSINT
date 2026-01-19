@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Búsqueda - OSINT Platform{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/search.css">
+{% endblock %}
+
+{% block content %}
+<main class="two-column">
+    <div class="card">
+        <h2>Nueva Búsqueda</h2>
+        
+        <div id="alertContainer"></div>
+        
+        <form id="searchForm">
+            <div class="form-group">
+                <label for="searchValue">Información a buscar</label>
+                <div class="input-group">
+                    <input 
+                        type="text" 
+                        id="searchValue" 
+                        name="value"
+                        placeholder="Nombre, correo, dominio, usuario, teléfono..."
+                        required
+                    >
+                    <button type="submit" class="btn-primary" id="searchBtn">
+                        Buscar
+                    </button>
+                </div>
+                <div class="info-box">
+                    El sistema detecta automáticamente el tipo de búsqueda y selecciona los módulos apropiados.
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    <div class="card">
+        <h2>Búsqueda Reciente</h2>
+        <div id="recentSearch" class="recent-search">
+            No hay búsquedas realizadas
+        </div>
+    </div>
+</main>
+
+<div class="card" id="resultsCard" style="display: none;">
+    <h2>Resultados</h2>
+    
+    <div id="jobStatus">
+        <div class="job-status-header">
+            <span class="loading"></span>
+            <span style="font-weight: 500;">Procesando búsqueda...</span>
+            <code id="jobId" class="job-id-code"></code>
+        </div>
+        <div class="job-status-box">
+            <div class="job-status-detail">
+                <strong style="color: var(--dark);">Estado:</strong> <span id="statusText">Aceptado</span>
+                <span id="statusBadge" class="badge badge-info">Procesando</span>
+            </div>
+            <div class="job-status-detail">
+                <strong style="color: var(--dark);">Tipo detectado:</strong> <code id="detectedType">-</code>
+            </div>
+        </div>
+    </div>
+    
+    <div id="findingsContainer" style="display: none;">
+        <h3 class="findings-section">Hallazgos Filtrados</h3>
+        <div id="findingsList"></div>
+    </div>
+    
+    <div id="statsContainer" class="stats-container">
+        <h3 class="findings-section">Estadísticas</h3>
+        <div class="stats-grid">
+            <div class="stat-card stat-primary">
+                <div class="stat-label">Total Hallazgos</div>
+                <div class="stat-value stat-primary-text" id="statTotal">0</div>
+            </div>
+            <div class="stat-card stat-success">
+                <div class="stat-label">Válidos</div>
+                <div class="stat-value stat-success-text" id="statValid">0</div>
+            </div>
+            <div class="stat-card stat-warning">
+                <div class="stat-label">Puntuación Promedio</div>
+                <div class="stat-value stat-warning-text" id="statScore">0.0</div>
+            </div>
+            <div class="stat-card stat-accent">
+                <div class="stat-label">Iteraciones</div>
+                <div class="stat-value stat-accent-text" id="statIters">0</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/search.js"></script>
+{% endblock %}
