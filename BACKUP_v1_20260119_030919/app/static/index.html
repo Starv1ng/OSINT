@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OSINT - Búsqueda de Información</title>
+  <script src="/static/i18n.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 600px;
+      width: 100%;
+      padding: 40px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #333;
+      font-weight: 500;
+      font-size: 14px;
+    }
+    input, select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    .help-text {
+      font-size: 12px;
+      color: #999;
+      margin-top: 4px;
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      margin-top: 10px;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+      color: #667eea;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .success-message {
+      display: none;
+      background: #d4edda;
+      color: #155724;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      border: 1px solid #c3e6cb;
+    }
+    .error-message {
+      display: none;
+      background: #f8d7da;
+      color: #721c24;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      border: 1px solid #f5c6cb;
+    }
+    .examples {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 30px;
+      border-left: 4px solid #667eea;
+    }
+    .examples h3 {
+      color: #333;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    .example-btn {
+      display: inline-block;
+      background: white;
+      border: 1px solid #ddd;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-right: 8px;
+      margin-bottom: 8px;
+      transition: all 0.2s;
+    }
+    .example-btn:hover {
+      background: #667eea;
+      color: white;
+      border-color: #667eea;
+    }
+    .language-selector {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+    }
+    .language-selector button {
+      width: auto;
+      padding: 8px 12px;
+      margin: 0 4px;
+      background: white;
+      color: #667eea;
+      border: 2px solid #667eea;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .language-selector button.active {
+      background: #667eea;
+      color: white;
+    }
+    .language-selector button:hover {
+      transform: none;
+    }
+    .advanced-section {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 2px solid #e0e0e0;
+    }
+    .advanced-header {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+      color: #667eea;
+      font-weight: 600;
+    }
+    .advanced-header:hover {
+      opacity: 0.8;
+    }
+    .arrow {
+      transition: transform 0.3s;
+      display: inline-block;
+    }
+    .advanced-header.collapsed .arrow {
+      transform: rotate(-90deg);
+    }
+    .advanced-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 600px) {
+      .advanced-options {
+        grid-template-columns: 1fr;
+      }
+      .language-selector {
+        position: static;
+        margin-bottom: 20px;
+      }
+    }
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      cursor: pointer;
+    }
+    .depth-display {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+    select[multiple] {
+      min-height: 100px;
+    }
+  </style>
+</head>
+<body>
+  <div class="language-selector" id="languageSelector">
+    <button class="lang-btn active" onclick="changeLanguage('es')">Español</button>
+    <button class="lang-btn" onclick="changeLanguage('en')">English</button>
+    <button class="lang-btn" onclick="changeLanguage('ru')">Русский</button>
+  </div>
+
+  <div class="container">
+    <h1 data-i18n="title">OSINT Platform</h1>
+    <p class="subtitle" data-i18n="subtitle">Búsqueda de información de fuentes abiertas</p>
+
+    <div class="error-message" id="errorMessage"></div>
+    <div class="success-message" id="successMessage"></div>
+
+    <form id="searchForm">
+      <div class="form-group">
+        <label for="value" data-i18n="searchLabel">¿Quién o qué buscas?</label>
+        <input 
+          type="text" 
+          id="value" 
+          name="value" 
+          data-i18n-placeholder="searchPlaceholder"
+          placeholder="Ej: Elon Musk, Donald Trump, una empresa..."
+          required
+        />
+        <p class="help-text" data-i18n="searchHint">Nombre de persona, usuario, email o empresa</p>
+      </div>
+
+      <div class="form-group">
+        <label for="input_type" data-i18n="typeLabel">Tipo de búsqueda</label>
+        <select id="input_type" name="input_type">
+          <option value="person" data-i18n-select="typePerson" selected>Persona</option>
+          <option value="username" data-i18n-select="typeUsername">Usuario (redes sociales)</option>
+          <option value="email" data-i18n-select="typeEmail">Correo electrónico</option>
+          <option value="company" data-i18n-select="typeCompany">Empresa</option>
+          <option value="general" data-i18n-select="typeGeneral">General</option>
+        </select>
+        <p class="help-text" data-i18n="typeHint">Selecciona el tipo de búsqueda más apropiado</p>
+      </div>
+
+      <div class="advanced-section">
+        <div class="advanced-header" id="advancedToggle" onclick="toggleAdvanced()">
+          <span class="arrow">▶</span>
+          <span data-i18n="advancedOptions">Opciones avanzadas</span>
+        </div>
+
+        <div class="advanced-options" id="advancedOptions" style="display: none;">
+          <div class="form-group">
+            <label for="depth" data-i18n="depthLabel">Profundidad de búsqueda</label>
+            <input type="range" id="depth" name="depth" min="1" max="3" value="1" />
+            <div class="depth-display">
+              <span data-i18n="depthLabel">Profundidad</span>: <span id="depthValue">1</span>/3
+            </div>
+            <p class="help-text" data-i18n="depthHint">1 = superficial, 3 = profunda</p>
+          </div>
+
+          <div class="form-group">
+            <label for="countries" data-i18n="countriesLabel">Países prioritarios (opcional)</label>
+            <select id="countries" name="countries" multiple>
+              <!-- Populated by JavaScript -->
+            </select>
+            <p class="help-text" data-i18n="countriesHint">Deja vacío para búsqueda global, o selecciona uno o más países</p>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" data-i18n="searchButton">Iniciar búsqueda</button>
+    </form>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p data-i18n="searching">Buscando información... esto puede tardar unos segundos</p>
+    </div>
+
+    <div class="examples">
+      <h3 data-i18n="examples">Búsquedas de ejemplo:</h3>
+      <button class="example-btn" onclick="setExample('Elon Musk', 'person')">Elon Musk</button>
+      <button class="example-btn" onclick="setExample('Donald Trump', 'person')">Donald Trump</button>
+      <button class="example-btn" onclick="setExample('elonmusk', 'username')">@elonmusk</button>
+      <button class="example-btn" onclick="setExample('contact@example.com', 'email')">Email</button>
+      <button class="example-btn" onclick="setExample('Tesla', 'company')">Tesla</button>
+    </div>
+  </div>
+
+<script>
+function changeLanguage(lang) {
+  i18n.setLanguage(lang);
+  
+  // Update active button
+  document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+  event.target.classList.add('active');
+  
+  // Update UI
+  i18n.updateUI();
+}
+
+function toggleAdvanced() {
+  const options = document.getElementById('advancedOptions');
+  const header = document.getElementById('advancedToggle');
+  
+  if (options.style.display === 'none') {
+    options.style.display = 'grid';
+    header.classList.remove('collapsed');
+  } else {
+    options.style.display = 'none';
+    header.classList.add('collapsed');
+  }
+}
+
+// Update depth display
+document.getElementById('depth')?.addEventListener('input', (e) => {
+  document.getElementById('depthValue').textContent = e.target.value;
+});
+
+function setExample(value, type) {
+  document.getElementById('value').value = value;
+  document.getElementById('input_type').value = type;
+  document.getElementById('value').focus();
+}
+
+function showError(message) {
+  const errorDiv = document.getElementById('errorMessage');
+  errorDiv.textContent = message;
+  errorDiv.style.display = 'block';
+  setTimeout(() => { errorDiv.style.display = 'none'; }, 5000);
+}
+
+function showSuccess(message) {
+  const successDiv = document.getElementById('successMessage');
+  successDiv.textContent = message;
+  successDiv.style.display = 'block';
+  setTimeout(() => { successDiv.style.display = 'none'; }, 3000);
+}
+
+document.getElementById('searchForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const value = document.getElementById('value').value.trim();
+  if (!value) {
+    showError(i18n.get('emptyError'));
+    return;
+  }
+
+  const input_type = document.getElementById('input_type').value;
+  const max_depth = parseInt(document.getElementById('depth').value) || 1;
+  const priority_countries = Array.from(document.getElementById('countries').selectedOptions).map(o => o.value);
+  const requester_id = 'web-ui-' + Date.now();
+
+  const payload = {
+    input_type,
+    value,
+    requester_id,
+    priority_countries,
+    max_depth
+  };
+
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('searchForm').style.opacity = '0.5';
+  document.querySelector('button[type="submit"]').disabled = true;
+
+  try {
+    const resp = await fetch('/api/v1/ingest/name', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer testtoken'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) {
+      const error = await resp.json();
+      throw new Error(error.detail || i18n.get('searchError'));
+    }
+
+    const data = await resp.json();
+    
+    if (data && data.job_id) {
+      showSuccess(i18n.get('redirecting'));
+      setTimeout(() => {
+        window.location.href = `/static/result.html?job=${encodeURIComponent(data.job_id)}`;
+      }, 1000);
+    } else {
+      showError(i18n.get('noJobId'));
+    }
+  } catch (err) {
+    showError(i18n.get('searchError') + ': ' + err.message);
+  } finally {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('searchForm').style.opacity = '1';
+    document.querySelector('button[type="submit"]').disabled = false;
+  }
+});
+
+// Initialize UI when page loads
+document.addEventListener('DOMContentLoaded', () => {
+  i18n.updateUI();
+  
+  // Update active language button
+  const currentLang = i18n.currentLanguage;
+  document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+  document.querySelector(`.lang-btn:nth-child(${currentLang === 'es' ? 1 : currentLang === 'en' ? 2 : 3})`).classList.add('active');
+  
+  // Mark advanced section as collapsed by default
+  document.getElementById('advancedToggle').classList.add('collapsed');
+});
+</script>
+</body>
+</html>
