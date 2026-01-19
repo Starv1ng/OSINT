@@ -1,38 +1,70 @@
-# 🔍 OSINT Project
+# OSINT Intelligence Platform (Version Beta 0.01)
 
-## ✅ What Works RIGHT NOW?
+## Description
 
-- **🐳 Docker Compose** - Everything containerized
-- **🚀 FastAPI** - REST endpoints at `http://localhost:8000`
-- **🗄️ PostgreSQL** - Database with `jobs` table (testing)
-- **🔐 Authentication** - Basic token system
-- **📊 Endpoints**:
-  - `GET /` - Welcome message
-  - `GET /api/v1/health` - System status
-  - `GET /api/v1/test-db` - Database connection test
-  - `POST /api/v1/ingest/name` - Create OSINT search (framework)
+Distributed OSINT (Open Source Intelligence) platform with microservices architecture for automated information gathering and analysis from open sources.
 
-### Current Status
+## Architecture
 
-**Foundation Complete - Ready for OSINT Module Development**
+The system consists of the following components:
 
-The infrastructure is fully operational and can accept search requests. The system is prepared for integrating actual OSINT data collection modules.
+- **API Service** (FastAPI) - REST gateway and web interface
+- **Worker Service** (Celery) - Asynchronous task execution
+- **PostgreSQL** - Job storage and status tracking
+- **Redis** - Message broker for task queue
+- **Elasticsearch** - Finding indexing and search
+- **MinIO** - File and artifact storage
+- **Neo4j** - Relationship and entity graph
 
-## Quick Start
+## Features
 
-### Prerequisites:
-- 🐳 **Docker** and **Docker Compose**
-- 📦 **Git**
+### Input Analysis (working on it)
+- Automatic input type detection (email, username, domain, person name, phone, URL, IP, hash)
+- Confidence scoring (0.0-1.0) for classification
+- Extraction of secondary indicators from input
 
+## Installation
 
-### Installation and execution:
+### Prerequisites
+- Docker 20.10+
+- Docker Compose 2.0+
+- 8GB RAM minimum
+- 20GB free disk space
+
+### Quick Start
+
 ```bash
-# 1. Clone the project
-git clone https://github.com/Starv1ng/osint-mvp.git
-cd osint-mvp
+# Clone repository
+git clone https://github.com/Starv1ng/OSINT.git
+cd OSINT
 
-# 2. Run (everything installs automatically)
-docker compose up --build
+# Start all services
+docker-compose up -d
 
-# 3. Test in your browser
-# Open: http://localhost:8000
+# View logs
+docker-compose logs -f api worker
+
+# Access web interface
+# http://localhost:8000
+```
+
+## Current Limitations
+
+- No real API credentials configured (modules return mock data)
+- Authentication bypassed in development mode
+- Limited rate limiting implementation
+- No caching layer for repeated queries
+- Basic error handling in some modules
+
+## Contributing
+
+1. Fork repository
+2. Create feature branch (`git checkout -b feature/name`)
+3. Commit changes (`git commit -m 'Add feature'`)
+4. Push to branch (`git push origin feature/name`)
+5. Open Pull Request
+
+## Security
+
+This platform is intended for legal OSINT research only. Users are responsible for complying with applicable laws and terms of service of data sources.
+
