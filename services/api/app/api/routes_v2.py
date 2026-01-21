@@ -118,7 +118,7 @@ def get_job(job_id: str, user=Depends(get_current_user)):
 @router.get("/jobs")
 def list_jobs(
     user=Depends(get_current_user),
-    limit: int = Query(default=20, le=settings.API_MAX_LIMIT),
+    limit: int = Query(default=20, le=1000),
     offset: int = 0,
     status: Optional[str] = None
 ):
