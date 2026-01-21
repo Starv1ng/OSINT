@@ -14,16 +14,9 @@ from .modules.utils.input_analyzer import InputAnalyzer
 from shared.postgres_client import PostgreSQLClient
 from shared.elasticsearch_client import ElasticsearchClient
 from shared.neo4j_client import Neo4jClient
+from config import config
 
 logger = logging.getLogger(__name__)
-
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://dev:devpass@postgres:5432/osint")
-ES_HOST = os.environ.get("ELASTICSEARCH_HOST", "http://elasticsearch:9200")
-NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://neo4j:7687")
-NEO4J_AUTH = (
-    os.environ.get("NEO4J_USER", "neo4j"),
-    os.environ.get("NEO4J_PASSWORD", "password123")
-)
 
 _pg_client = None
 _es_client = None
@@ -32,25 +25,25 @@ _neo4j_client = None
 def get_pg_client():
     global _pg_client
     if _pg_client is None:
-        _pg_client = PostgreSQLClient(DATABASE_URL)
+        _pg_client = PostgreSQLClient(config.database.url)
     return _pg_client
 
 def get_es_client():
     global _es_client
     if _es_client is None:
-        _es_client = ElasticsearchClient([ES_HOST])
+        _es_client = ElasticsearchClient([config.elasticsearch.host])
     return _es_client
 
 def get_neo4j_client():
     global _neo4j_client
     if _neo4j_client is None:
-        _neo4j_client = Neo4jClient(NEO4J_URI, NEO4J_AUTH)
+        _neo4j_client = Neo4jClient(config.neo4j.uri, config.neo4j.auth)
     return _neo4j_client
 
 dynamic_orchestrator = DynamicModuleOrchestrator(
-    max_iterations=int(os.environ.get("MAX_ITERATIONS", "5")),
-    relevance_threshold=float(os.environ.get("RELEVANCE_THRESHOLD", "0.5")),
-    execution_mode=os.environ.get("EXECUTION_MODE", "normal"),
+    max_iterations=config.orchestrator.max_iterations,
+    relevance_threshold=config.orchestrator.relevance_threshold,
+    execution_mode=config.orchestrator.execution_mode,
     pg_client=get_pg_client()
 )
 
