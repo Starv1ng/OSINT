@@ -125,8 +125,8 @@ class DynamicModuleOrchestrator:
             try:
                 if self.pg_client is None:
                     from shared.postgres_client import PostgreSQLClient
-                    db_url = os.environ.get("DATABASE_URL", "postgresql://dev:devpass@postgres:5432/osint")
-                    self.pg_client = PostgreSQLClient(db_url)
+                    from config import config
+                    self.pg_client = PostgreSQLClient(config.database.url)
 
                 with self.pg_client.get_connection() as conn:
                     with conn.cursor() as cur:
