@@ -384,7 +384,7 @@ document.getElementById('searchForm').addEventListener('submit', async (e) => {
   document.querySelector('button[type="submit"]').disabled = true;
 
   try {
-    const resp = await fetch('/api/v1/ingest/name', {
+    const resp = await fetch('/api/v2/ingest/name', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

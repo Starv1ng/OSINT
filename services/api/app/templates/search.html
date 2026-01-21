@@ -45,6 +45,40 @@
 
 <div class="card" id="resultsCard" style="display: none;">
     <h2>Resultados</h2>
+
+    <div class="filters-grid">
+        <div class="form-group">
+            <label for="typeFilter">Tipo de hallazgo</label>
+            <select id="typeFilter">
+                <option value="">Todos</option>
+                <option value="email">Email</option>
+                <option value="username">Username</option>
+                <option value="domain">Domain</option>
+                <option value="phone">Phone</option>
+                <option value="ip">IP</option>
+                <option value="url">URL</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="minConfidence">Confianza mínima</label>
+            <input type="number" id="minConfidence" min="0" max="1" step="0.1" placeholder="0.4">
+        </div>
+        <div class="form-group checkbox-row">
+            <label for="verifiedOnly">Solo verificados</label>
+            <input type="checkbox" id="verifiedOnly">
+        </div>
+        <div class="form-group">
+            <label for="pageSize">Tamaño de página</label>
+            <select id="pageSize">
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <button class="btn-primary" id="applyFilters">Aplicar filtros</button>
+        </div>
+    </div>
     
     <div id="jobStatus">
         <div class="job-status-header">
@@ -65,6 +99,24 @@
     
     <div id="findingsContainer" style="display: none;">
         <h3 class="findings-section">Hallazgos Filtrados</h3>
+        <div class="export-actions">
+            <button class="btn-secondary" id="exportJson">Exportar JSON</button>
+            <button class="btn-secondary" id="exportCsv">Exportar CSV</button>
+        </div>
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-title">Timeline</div>
+                <canvas id="timelineChart" height="140" style="width: 100%; background: var(--light);"></canvas>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">Hallazgos por módulo</div>
+                <canvas id="moduleChart" height="140" style="width: 100%; background: var(--light);"></canvas>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">Distribución de confianza</div>
+                <canvas id="confidenceChart" height="140" style="width: 100%; background: var(--light);"></canvas>
+            </div>
+        </div>
         <div id="findingsList"></div>
     </div>
     
@@ -88,11 +140,16 @@
                 <div class="stat-value stat-accent-text" id="statIters">0</div>
             </div>
         </div>
+        <div class="pagination-controls" id="findingsPagination" style="margin-top: 12px;">
+            <button class="btn-secondary" id="prevFindings">← Anterior</button>
+            <span class="page-info" id="findingsPageInfo"></span>
+            <button class="btn-secondary" id="nextFindings">Siguiente →</button>
+        </div>
     </div>
 </div>
 
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/search.js"></script>
+<script src="/static/js/search.js?v={{ range(1, 1000000) | random }}"></script>
 {% endblock %}

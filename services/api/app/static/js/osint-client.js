@@ -1,6 +1,6 @@
 // Cliente JS para OSINT Inteligente
 class OSINTClient {
-    constructor(baseURL = '/api/v1') {
+    constructor(baseURL = '/api/v2') {
         this.baseURL = baseURL;
         this.currentJobId = null;
         this.pollingInterval = null;

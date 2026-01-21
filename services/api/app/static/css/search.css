@@ -158,3 +158,42 @@
     display: flex;
     gap: 12px;
 }
+
+.filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+    margin: 12px 0;
+}
+
+.chart-card {
+    background: var(--light);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+}
+
+.chart-title {
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 6px;
+}
+
+.export-actions {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0 12px 0;
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}

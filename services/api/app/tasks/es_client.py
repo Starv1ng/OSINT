@@ -1,12 +1,14 @@
 import os
 import logging
 from elasticsearch import Elasticsearch
+from api.config import settings
 
 logger = logging.getLogger(__name__)
 
-ES_URL = os.environ.get('ELASTIC_URL', 'http://elasticsearch:9200')
-FINDINGS_INDEX = os.environ.get('ELASTIC_FINDINGS_INDEX', 'findings')
-MODULE_RUNS_INDEX = os.environ.get('ELASTIC_MODULE_RUNS_INDEX', 'module_runs')
+# Obtener valores de configuración centralizada
+ES_URL = settings.elasticsearch.host
+FINDINGS_INDEX = settings.elasticsearch.findings_index
+MODULE_RUNS_INDEX = settings.elasticsearch.module_runs_index
 
 
 def _get_client():

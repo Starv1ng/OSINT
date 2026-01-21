@@ -1,9 +1,10 @@
 # services/api/app/api/models/db.py
 from sqlalchemy import create_engine, MetaData, Table, Column, String, Text, Float, JSON, TIMESTAMP
 from sqlalchemy.sql import func
-import os
+from api.config import settings
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://dev:devpass@postgres:5432/osint")
+# Obtener URL de configuración centralizada
+DATABASE_URL = settings.DATABASE_URL
 engine = create_engine(DATABASE_URL)
 metadata = MetaData()
 

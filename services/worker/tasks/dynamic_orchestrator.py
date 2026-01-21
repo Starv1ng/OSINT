@@ -3,6 +3,7 @@
 import asyncio
 import re
 import logging
+import os
 from typing import Dict, List, Any, Set, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -31,12 +32,20 @@ logger = logging.getLogger(__name__)
 class DynamicModuleOrchestrator:
     """Orquestador dinámico que ejecuta módulos iterativamente basado en hallazgos"""
     
-    def __init__(self, max_workers: int = 3, max_iterations: int = 5, relevance_threshold: float = 0.5, execution_mode: str = None):
+    def __init__(
+        self,
+        max_workers: int = 3,
+        max_iterations: int = 5,
+        relevance_threshold: float = 0.5,
+        execution_mode: str = None,
+        pg_client=None,
+    ):
         self.max_workers = max_workers
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.max_iterations = max_iterations
         self.relevance_threshold = relevance_threshold
         self.execution_mode = execution_mode or 'normal'
+        self.pg_client = pg_client
         
         # Aplicar preajuste si se especifica modo
         if execution_mode and execution_mode != 'custom':
@@ -111,6 +120,30 @@ class DynamicModuleOrchestrator:
         # Ejecutar iteraciones mientras haya indicadores nuevos
         while iteration < self.max_iterations and new_indicators_found:
             iteration += 1
+            
+            # Check for pause status before each iteration
+            try:
+                if self.pg_client is None:
+                    from shared.postgres_client import PostgreSQLClient
+                    from config import config
+                    self.pg_client = PostgreSQLClient(config.database.url)
+
+                with self.pg_client.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT status FROM jobs WHERE job_id = %s", (job_id,))
+                        result = cur.fetchone()
+                        if result and result[0] == 'paused':
+                            logger.info(f"Job {job_id} has been paused, stopping execution")
+                            return {
+                                "search_query": initial_query,
+                                "search_type": initial_type,
+                                "findings": all_findings,
+                                "status": "paused",
+                                "iterations": iteration - 1
+                            }
+            except Exception as pause_check_error:
+                logger.warning(f"Could not check pause status: {pause_check_error}")
+            
             logger.info(f"\nIteración {iteration}/{self.max_iterations}")
             
             iteration_findings = []

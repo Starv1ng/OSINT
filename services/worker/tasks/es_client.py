@@ -3,12 +3,14 @@ import hashlib
 import logging
 from datetime import datetime
 from elasticsearch import Elasticsearch, helpers
+from config import config
 
 logger = logging.getLogger(__name__)
 
-ES_URL = os.environ.get('ELASTIC_URL', 'http://elasticsearch:9200')
-FINDINGS_INDEX = os.environ.get('ELASTIC_FINDINGS_INDEX', 'findings')
-MODULE_RUNS_INDEX = os.environ.get('ELASTIC_MODULE_RUNS_INDEX', 'module_runs')
+# Obtener valores de configuración centralizada
+ES_URL = config.elasticsearch.host
+FINDINGS_INDEX = config.elasticsearch.findings_index
+MODULE_RUNS_INDEX = config.elasticsearch.module_runs_index
 
 # Mapeo mínimo para el índice de hallazgos
 FINDINGS_MAPPING = {

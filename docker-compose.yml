@@ -64,7 +64,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./services/api/app:/app
+      - ./services/api/app:/app/app
+      - ./services/shared:/app/shared
     depends_on:
       - postgres
       - redis
@@ -79,6 +80,7 @@ services:
       - ./envs/worker.env
     volumes:
       - ./services/worker/tasks:/app/tasks
+      - ./services/shared:/app/shared
     depends_on:
       - postgres
       - redis
