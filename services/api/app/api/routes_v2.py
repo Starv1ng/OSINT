@@ -21,7 +21,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 pg_client = PostgreSQLClient(settings.DATABASE_URL)
-es_client = ElasticsearchClient([settings.ELASTICSEARCH_HOST])
+es_client = ElasticsearchClient(
+    [settings.ELASTICSEARCH_HOST],
+    findings_index=settings.elasticsearch.findings_index,
+    module_runs_index=settings.elasticsearch.module_runs_index
+)
 neo4j_client = Neo4jClient(settings.NEO4J_URI, (settings.NEO4J_USER, settings.NEO4J_PASSWORD))
 
 class IngestRequest(BaseModel):

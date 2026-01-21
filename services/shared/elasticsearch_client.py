@@ -92,18 +92,22 @@ class ElasticsearchClient:
         }
     }
     
-    def __init__(self, hosts: List[str], timeout: int = 30):
+    def __init__(self, hosts: List[str], timeout: int = 30, 
+                 findings_index: str = "findings-v2", 
+                 module_runs_index: str = "module-runs-v2"):
         """
         Initialize Elasticsearch client
         
         Args:
             hosts: List of Elasticsearch hosts
             timeout: Request timeout in seconds
+            findings_index: Name of findings index (default: findings-v2)
+            module_runs_index: Name of module runs index (default: module-runs-v2)
         """
         self.es = Elasticsearch(hosts, timeout=timeout)
         self.logger = logging.getLogger(__name__)
-        self.findings_index = "findings-v2"
-        self.module_runs_index = "module-runs-v2"
+        self.findings_index = findings_index
+        self.module_runs_index = module_runs_index
     
     # ============================================================
     # INDEX MANAGEMENT

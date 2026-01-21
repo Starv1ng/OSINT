@@ -2,12 +2,13 @@
 from celery import Celery
 import logging
 import os
+from api.config import settings
 
 # Configurar Celery para el API (debe usar la misma configuración)
 celery_app = Celery('api_sender')
 celery_app.conf.update(
-    broker_url='redis://redis:6379/0',
-    result_backend='redis://redis:6379/0',
+    broker_url=settings.redis.celery_broker,
+    result_backend=settings.redis.url,
 )
 
 logger = logging.getLogger(__name__)

@@ -31,7 +31,11 @@ def get_pg_client():
 def get_es_client():
     global _es_client
     if _es_client is None:
-        _es_client = ElasticsearchClient([config.elasticsearch.host])
+        _es_client = ElasticsearchClient(
+            [config.elasticsearch.host],
+            findings_index=config.elasticsearch.findings_index,
+            module_runs_index=config.elasticsearch.module_runs_index
+        )
     return _es_client
 
 def get_neo4j_client():
