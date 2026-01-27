@@ -151,7 +151,7 @@ class DynamicModuleOrchestrator:
             # Verificar si hay información relevante nueva
             if new_findings == 0:
                 new_indicators_found = False
-                logger.info("   ℹ️  Convergencia alcanzada - no hay información nueva relevante")
+                logger.info("Convergencia alcanzada - no hay información nueva relevante")
 
         # Resultado final
         return {

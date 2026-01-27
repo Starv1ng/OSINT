@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Búsqueda Avanzada - OSINT Platform{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/advanced_search.css">
+{% endblock %}
+
+{% block content %}
+<main>
+    <div class="card">
+        <h2>Configurar Búsqueda Avanzada</h2>
+        
+        <!-- Tipo de búsqueda y valor -->
+        <section class="form-section">
+            <h3>1. Datos de Búsqueda</h3>
+            <div class="form-group">
+                <label for="searchType">Tipo de Búsqueda:</label>
+                <select id="searchType" required>
+                    <option value="">Seleccione un tipo...</option>
+                    <option value="person">👤 Persona (Nombre completo)</option>
+                    <option value="email">📧 Email</option>
+                    <option value="username">🆔 Usuario/Username</option>
+                    <option value="phone">📱 Teléfono</option>
+                    <option value="domain">🌐 Dominio</option>
+                    <option value="ip">🖥️ Dirección IP</option>
+                    <option value="company">🏢 Empresa</option>
+                    <option value="password">🔑 Hash de Contraseña</option>
+                    <option value="url">🔗 URL</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="searchValue">Valor a Buscar:</label>
+                <input type="text" id="searchValue" placeholder="Ingrese el valor..." required>
+                <small id="valueHint" class="hint"></small>
+            </div>
+
+            <div class="form-group">
+                <label for="additionalContext">Contexto Adicional (Opcional):</label>
+                <textarea id="additionalContext" rows="3" placeholder="Ej: País, ciudad, profesión, etc."></textarea>
+            </div>
+        </section>
+
+        <!-- Selección de módulos -->
+        <section class="form-section">
+            <h3>2. Selección de Módulos</h3>
+            <div class="module-selection">
+                <div class="module-controls">
+                    <button type="button" id="selectAllModules" class="btn-secondary">Seleccionar Todos</button>
+                    <button type="button" id="deselectAllModules" class="btn-secondary">Deseleccionar Todos</button>
+                    <button type="button" id="selectRecommended" class="btn-secondary">Solo Recomendados</button>
+                </div>
+
+                <div id="modulesList" class="modules-grid">
+                    <!-- Los módulos se cargarán dinámicamente según el tipo -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Configuración avanzada -->
+        <section class="form-section">
+            <h3>3. Configuración Avanzada</h3>
+            <div class="advanced-config">
+                <div class="form-group">
+                    <label for="executionMode">Modo de Ejecución:</label>
+                    <select id="executionMode">
+                        <option value="conservative">Conservador (Rápido, menos resultados)</option>
+                        <option value="normal" selected>Normal (Balanceado)</option>
+                        <option value="aggressive">Agresivo (Lento, más resultados)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="maxIterations">Iteraciones Máximas:</label>
+                    <input type="number" id="maxIterations" min="1" max="10" value="5">
+                    <small>Número de veces que se analizarán hallazgos para buscar nuevos indicadores</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="relevanceThreshold">Umbral de Relevancia:</label>
+                    <input type="range" id="relevanceThreshold" min="0" max="1" step="0.1" value="0.5">
+                    <span id="thresholdValue">0.5</span>
+                    <small>Confianza mínima para considerar un hallazgo (0.0 - 1.0)</small>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="validateProfiles">
+                        Validar perfiles sociales encontrados
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="extractIndicators" checked>
+                        Extraer indicadores de resultados (emails, usernames, etc.)
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <!-- API Keys requeridas -->
+        <section class="form-section" id="apiKeysSection" style="display: none;">
+            <h3>4. API Keys Requeridas</h3>
+            <div class="api-keys-warning">
+                <p><strong>Advertencia:</strong> Los siguientes módulos requieren API Keys:</p>
+                <ul id="requiredApiKeysList"></ul>
+                <a href="/api-keys" target="_blank" class="btn-link">Configurar API Keys →</a>
+            </div>
+        </section>
+
+        <!-- Botones de acción -->
+        <div class="form-actions">
+            <button type="button" id="resetForm" class="btn-secondary">Limpiar Formulario</button>
+            <button type="button" id="savePreset" class="btn-secondary">Guardar Configuración</button>
+            <button type="submit" id="startSearch" class="btn-primary">Iniciar Búsqueda</button>
+        </div>
+    </div>
+
+    <!-- Resultados -->
+    <div class="card" id="resultsContainer" style="display: none;">
+        <h2>Resultados</h2>
+        <div class="job-status">
+            <div class="status-header">
+                <span class="status-badge" id="jobStatus">Procesando...</span>
+                <span class="job-id">Job ID: <code id="jobId"></code></span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="job-stats" id="jobStats">
+                <div class="stat">
+                    <span class="stat-label">Hallazgos:</span>
+                    <span class="stat-value" id="findingsCount">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Indicadores:</span>
+                    <span class="stat-value" id="indicatorsCount">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Módulos ejecutados:</span>
+                    <span class="stat-value" id="modulesCount">0</span>
+                </div>
+            </div>
+        </div>
+        <div id="resultsAlerts" class="inline-alert" style="display: none;"></div>
+
+        <div class="tabs">
+            <button class="tab-button active" data-tab="findingsTab">Hallazgos</button>
+            <button class="tab-button" data-tab="indicatorsTab">Indicadores</button>
+            <button class="tab-button" data-tab="modulesTab">Módulos</button>
+            <button class="tab-button" data-tab="graphTab">Grafo</button>
+        </div>
+
+        <div class="tab-content active" id="findingsTab">
+            <div class="findings-list" id="findingsList"></div>
+        </div>
+
+        <div class="tab-content" id="indicatorsTab">
+            <div class="panel-header">
+                <span>Indicadores</span>
+                <span class="panel-counter" id="indicatorsPanelCount"></span>
+            </div>
+            <div id="indicatorsList" class="mini-list"></div>
+        </div>
+
+        <div class="tab-content" id="modulesTab">
+            <div class="panel-header">
+                <span>Ejecución de módulos</span>
+                <span class="panel-counter" id="moduleRunsPanelCount"></span>
+            </div>
+            <div id="moduleRunsList" class="mini-list"></div>
+        </div>
+
+        <div class="tab-content" id="graphTab">
+            <div class="graph-controls">
+                <div class="form-inline">
+                    <label>Origen</label>
+                    <input type="text" id="graphSource" placeholder="valor origen">
+                    <label>Destino</label>
+                    <input type="text" id="graphTarget" placeholder="valor destino">
+                    <button type="button" class="btn-secondary" id="shortestPathBtn">Camino más corto</button>
+                </div>
+                <small class="hint">Usa los valores de indicadores/hallazgos. El backend aplica el contrato /graph y /graph/shortest-path.</small>
+            </div>
+            <div class="panel" id="graphSummary">
+                <div class="panel-header">
+                    <span>Grafo del job</span>
+                    <span class="panel-counter" id="graphCounter"></span>
+                </div>
+                <div id="graphContent" class="mini-list"></div>
+            </div>
+            <div class="panel" id="pathSummary">
+                <div class="panel-header">
+                    <span>Camino más corto</span>
+                </div>
+                <div id="pathContent" class="mini-list"></div>
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/advanced_search.js"></script>
+{% endblock %}
